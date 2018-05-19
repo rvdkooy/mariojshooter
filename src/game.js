@@ -6,6 +6,8 @@ const bottomMargin = 182;
 const backgroundImage = document.getElementById('background');
 const mario = document.getElementById('mario');
 const goomba = document.getElementById('goomba');
+const spiny = document.getElementById('spiny');
+const bulletBill = document.getElementById('bullet');
 let score = 0;
 let gameOver = false;
 
@@ -20,7 +22,7 @@ const create2DWorld = () => {
     canvas.height = 768;
     canvas.className = 'world';
     const ctx = canvas.getContext("2d");
-    
+
     container.appendChild(canvas);
 
     return {
@@ -34,13 +36,16 @@ const create2DWorld = () => {
 const Player = function (world) {
     this.width = 100;
     this.height = 128;
-    this.posX = ((world.width / 2) - (this.width / 2));
-    this.posY = (world.height - bottomMargin);
     this.color = 'white';
     this.direction = 0;
     this.leftDown = false;
     this.rightDown = false;
     this.velocity = 2;
+
+    this.positionCenter = () => {
+        this.posX = ((world.width / 2) - (this.width / 2));
+        this.posY = (world.height - bottomMargin);
+    };
 
     this.keyUp = (keyCode) => {
         if (keyCode === keyCodes.LEFT) {
@@ -76,7 +81,7 @@ const Player = function (world) {
         if ((this.leftDown || this.rightDown) && this.velocity < 10) {
             this.velocity += 1;
         }
-        
+
         if (this.leftDown && !this.rightDown) {
             const newPos = this.posX - this.velocity;
             if (!this._detectWorldBoundary(world.width, newPos)) {
@@ -94,21 +99,23 @@ const Player = function (world) {
                 this.posX = world.width - this.width;
             }
         }
-        
+
         world.ctx.drawImage(mario, this.posX, this.posY, this.width, this.height);
     }
+
+    this.positionCenter();
 }
 
-const Bullet = function(world, posX) {
+const Bullet = function (world, posX) {
     this.posX = posX;
     this.posY = (world.height - bottomMargin);
     this.color = 'orange';
     this.radius = 10;
     this.velocity = 15;
-    
+
     this.update = (world) => {
         this.posY = this.posY - this.velocity;
-        
+
         world.ctx.beginPath();
         world.ctx.arc(this.posX, this.posY, this.radius, 0, 2 * Math.PI, false);
         world.ctx.fillStyle = this.color;
@@ -116,24 +123,23 @@ const Bullet = function(world, posX) {
     }
 };
 
-const Enemy = function(world, posX) {
+const Enemy = function (world, image, width, height, posX) {
     this.posX = posX;
     this.posY = 0;
-    this.width = 70;
-    this.height = 81;
-    this.color = 'red';
+    this.width = width;
+    this.height = height;
     this.velocity = 3;
-    
+    this.image = image;
     this.update = (world) => {
         this.posY = this.posY + this.velocity;
-        world.ctx.drawImage(goomba, this.posX, this.posY, this.width, this.height);
+        world.ctx.drawImage(this.image, this.posX, this.posY, this.width, this.height);
     };
 
     this.gotHit = (bulletX, bulletY) => {
         if (bulletX > (this.posX) && bulletX < (this.posX + this.width) &&
-            bulletY > this.posY && bulletY < (this.posY + this.height) ) {
-                return true;
-            }
+            bulletY > this.posY && bulletY < (this.posY + this.height)) {
+            return true;
+        }
     };
 }
 
@@ -154,17 +160,11 @@ const keyDownEvent = (world, player, keyCode) => {
             player.keyDown(keyCode);
         }
         if (keyCode === keyCodes.SPACE) {
-            shootBullet(world, player.getCenterPos());        
+            shootBullet(world, player.getCenterPos());
         }
     } else {
         if (keyCode === keyCodes.SPACE) {
-            gameOver = false;
-            enemies = [];
-            bullets = [];
-            score = 0;
-            window.requestAnimationFrame(() => {
-                gameLoop(world, player);
-            });
+            restartGame(world, player);
         }
     }
 };
@@ -176,18 +176,55 @@ const keyUpEvent = (world, player, keyCode) => {
 };
 
 const shootBullet = (world, posX) => {
-    beep();
-    bullets.push(new Bullet(world, posX));
+    
+    if (bullets.length < 2) {
+        beep();
+        bullets.push(new Bullet(world, posX));
+    }
 };
+
+const restartGame = (world, player) => {
+    gameOver = false;
+    enemies = [];
+    bullets = [];
+    score = 0;
+    player.positionCenter();
+    window.requestAnimationFrame(() => {
+        gameLoop(world, player);
+    });
+};
+
+const createGoomba = (world, player) => 
+    new Enemy(world, goomba, 70, 81,
+        getRandomInt((player.width / 2), world.width - (player.width / 2)));
+
+const createSpiny = (world, player) => 
+    new Enemy(world, spiny, 70, 74,
+        getRandomInt((player.width / 2), world.width - (player.width / 2)));
+
+const createBulletBill = (world, player) => 
+    new Enemy(world, bulletBill, 70, 80,
+        getRandomInt((player.width / 2), world.width - (player.width / 2)));
 
 const gameLoop = (world, player) => {
     world.clear();
     world.ctx.drawImage(backgroundImage, 0, 0, world.width, world.height + 70);
-    
+
     player.update(world);
-    
+
     if (!enemies.length) {
-        enemies.push(new Enemy(world, getRandomInt((player.width / 2), world.width - (player.width / 2))));
+        const random = getRandomInt(1, 3);
+        switch (random) {
+            case 1:
+                enemies.push(createSpiny(world, player));
+                break;
+            case 2:
+                enemies.push(createGoomba(world, player));
+                break;
+            case 3:
+                enemies.push(createBulletBill(world, player));
+                break;
+        }
     }
 
     for (let ei = 0; ei < enemies.length; ei++) {
@@ -196,7 +233,7 @@ const gameLoop = (world, player) => {
             enemies.splice(ei, 1);
         } else {
             enemy.update(world);
-            if ((enemy.posY + enemy.height)  >= world.height) {
+            if ((enemy.posY + enemy.height) >= world.height) {
                 gameOver = true;
             }
         }
